@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="es">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Predicción de emociones</title>
+
+    <style>
+        img {
+            max-width: 240px;
+            border: 1px solid #ccc;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Evaluar emoción</h1>
+    <input id="file-input" type="file" accept="image/*">
+    <img id="preview" alt="Vista previa" />
+    <button id="send">Enviar</button>
+    <div id="result"></div>
+
+    <script>
+        const fileInput = document.getElementById("file-input");
+        const preview = document.getElementById("preview");
+        const result = document.getElementById("result");
+
+        fileInput.addEventListener("change", () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => { preview.src = e.target.result; };
+            reader.readAsDataURL(file);
+        });
+
+        document.getElementById("send").addEventListener("click", async () => {
+            const file = fileInput.files[0];
+            if (!file) return alert("Selecciona una imagen");
+            const form = new FormData();
+            form.append("file", file);
+            const resp = await fetch("http://localhost:8000/predict-emotion/", {
+                method: "POST",
+                body: form
+            });
+            const data = await resp.json();
+            result.textContent = `Emoción: ${data.emotion}`;
+        });
+    </script>
+</body>
+
+</html>
