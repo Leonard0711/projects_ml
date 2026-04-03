@@ -4,10 +4,11 @@ import kagglehub
 import re
 import os
 import json
+from pathlib import Path
 
-RAW_DIR = "../../data/raw"
-INTERIM_DIR = "../../data/interim"
-PROCESSED_DIR = "../../data/processed"
+PATH_BASE = Path(__file__).resolve().parents[2]
+RAW_DIR = PATH_BASE / "data" / "raw"
+INTERIM_DIR = PATH_BASE / "data" / "interim"
 
 def load_from_github(repo:str, file_path:str) -> pd.DataFrame:
     url = f"https://raw.githubusercontent.com/{repo}/master/{file_path}"
@@ -28,6 +29,7 @@ def load_from_kaggle(dataset: str, file_name:str) -> pd.DataFrame:
     raise ValueError(f"Formato del archivo no soportado: {ext}")
 
 def load_raw_data(file_name:str, subdir:str | None = None, **read_kwargs) -> pd.DataFrame:
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
     base = os.path.join(RAW_DIR, subdir) if subdir else RAW_DIR
     path = os.path.join(base, file_name)
     ext = os.path.splitext(file_name)[-1].lower()
@@ -40,30 +42,31 @@ def load_raw_data(file_name:str, subdir:str | None = None, **read_kwargs) -> pd.
 def basic_clean(df:pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
-    df["genres"] = df["genres"].apply(lambda x: x.split("|"))
-    df["title"] = df["title"].apply(lambda x: re.sub("[^a-zA-Z0-9 ]", "", x))
+    df["genres"] = df["genres"].apply(lambda x: x.split("|") if isinstance(x, str) else [])
+    df["title"] = df["title"].astype(str).replace("[^a-zA-Z0-9 ]", "", regex=True)
     return df
 
 # extrayendo el procentaje correspondiente de cada puntaje de rating para cada película
-def extract_rating_percentages(df:pd.DataFrame) -> pd.DataFrame:
+def percentage_group_sampling(df:pd.DataFrame, min_samples: int) -> pd.DataFrame:
     rating_percentajes = []
     for rating in df["rating"].unique():
         group = df.loc[df["rating"]==rating]
-        if len(group) >= 1000:
-            proportion = len(group)/len(df)
-            rating_percentajes.append(group.sample(frac=proportion))
+        if len(group) >= min_samples:
+            prop = len(group)/len(df)
+            rating_percentajes.append(group.sample(frac=prop))
         else:
-            print(f"Rating {rating} contiene menos de 1000 registros, se asignará un porcentaje de 0")
-            proportion = 0
-    return pd.concat(rating_percentajes).reset_index(drop=True)
+            print(f"Rating {rating} contiene menos de {min_samples} registros, se asignará un porcentaje de 0")
+    if not rating_percentajes:
+        raise ValueError(f"Ningún rating cumple con el mínimo de {min_samples} registros")
+    return pd.concat(rating_percentajes, axis=0).reset_index(drop=True)
 
 def save_interim(df: pd.DataFrame, filename: str, var: str = None) -> str:
-    os.makedirs(INTERIM_DIR, exist_ok=True)
-    path = os.path.join(INTERIM_DIR, filename)
-    ext = os.path.splitext(filename)[-1].lower()
+    INTERIM_DIR.mkdir(parents=True, exist_ok=True)
+    path = INTERIM_DIR / filename
+    ext = path.suffix.lower()
     if ext == ".csv":
             if var is not None:
-                df[var] = df[var].apply(json.dumps)
+                df[var] = df[var].apply(lambda x: json.dumps(x, ensure_ascii=False) if isinstance(x, (list, dict)) else x)
                 df.to_csv(path, index=False)
             else:
                 df.to_csv(path, index=False)
@@ -74,18 +77,4 @@ def save_interim(df: pd.DataFrame, filename: str, var: str = None) -> str:
     return path
 
 if __name__ == "__main__":
-
-    ratings_df = load_from_github("jeknov/movieRec/refs/heads", "ratings.csv")
-    print(f"Datos cargados desde GitHub ratings_df: {ratings_df.shape}")
-    print(ratings_df.head())
-    movies_df = load_from_github("jeknov/movieRec/refs/heads", "movies.csv")
-    print(f"Datos cargados desde GitHub movies_df: {movies_df.shape}")
-    print(movies_df.head())
-
-    movies_clean_df = basic_clean(movies_df)
-    print(movies_clean_df.head())
-    ratings_filter_df = extract_rating_percentages(ratings_df)
-    print(f"Datos filtrados por rating: {ratings_filter_df.shape}")
-
-    save_interim(movies_clean_df, "movies_clean.csv", "genres")
-    save_interim(ratings_filter_df, "ratings_filtered.csv")
+    pass
