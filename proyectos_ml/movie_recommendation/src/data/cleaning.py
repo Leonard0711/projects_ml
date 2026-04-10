@@ -67,9 +67,7 @@ def save_interim(df: pd.DataFrame, filename: str, var: str = None) -> str:
     if ext == ".csv":
             if var is not None:
                 df[var] = df[var].apply(lambda x: json.dumps(x, ensure_ascii=False) if isinstance(x, (list, dict)) else x)
-                df.to_csv(path, index=False)
-            else:
-                df.to_csv(path, index=False)
+            df.to_csv(path, index=False)
     elif ext in [".xlsx", ".xls"]:
         df.to_excel(path, index=False)
     else:
